@@ -140,7 +140,7 @@ See [section 5](#5-creating-all-cryptographic-functions) for how to implement ke
 
 ### 3.3 Register each node
 
-Each node, as they are started up, should firstcreate their pair of keys and then should register themself on the registry.
+Each node, as they are started up, should first create their pair of keys and then should register themself on the registry.
 
 ### 3.4 Allow users to retrieve the registry
 
