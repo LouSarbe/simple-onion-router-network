@@ -2,6 +2,7 @@ import bodyParser from "body-parser";
 import express, {Request, Response} from "express";
 import { BASE_ONION_ROUTER_PORT } from "../config";
 import { rsaDecrypt } from "../crypto";
+import { webcrypto } from "crypto";
 
 export async function simpleOnionRouter(nodeId: number) {
   const onionRouter = express();
@@ -33,9 +34,11 @@ export async function simpleOnionRouter(nodeId: number) {
 
   // 6.2
   onionRouter.post("/message", async (req: Request, res: Response) => {
+    const privateKey = (await fetch(`http://localhost:8080/getPrivateKey`)).json();
     const { message }: { message: string } = req.body;
-    const decryptedMessage = await rsaDecrypt(message, privateKey);
-    const nextDestination = extractNextDestination(decryptedMessage);
+    if (privateKey instanceof webcrypto.CryptoKey){
+      const decryptedMessage = await rsaDecrypt(message,privateKey);
+      const nextDestination = extractNextDestination(decryptedMessage);
 
     forwardMessage(decryptedMessage, nextDestination);
 
@@ -43,7 +46,12 @@ export async function simpleOnionRouter(nodeId: number) {
     lastReceivedDecryptedMessage = decryptedMessage;
     lastMessageDestination = nextDestination;
 
-    res.json({ success: true, message: "Message received and forwarded successfully" });
+    return res.json({ success: true/*, message: "Message received and forwarded successfully"*/ });
+    }
+    else{
+      return res.status(500).json({ error: "Failed to decrypt message" });
+    }
+    
   });
 
   function extractNextDestination(decryptedMessage: string): number {

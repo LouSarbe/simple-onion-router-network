@@ -11,6 +11,7 @@ import {
   rsaEncrypt,
   createRandomSymmetricKey,
 } from "../crypto";
+import { Node, RegisterNodeBody, GetNodeRegistryBody } from "../registry/registry";
 
 export type SendMessageBody = {
   message: string;
@@ -52,10 +53,31 @@ export async function user(userId: number) {
     const { message, destinationUserId } = req.body;
 
     try {
-      // Fetch node registry to get circuit information
-      const registryResponse = await fetch(`http://localhost:3001/nodeRegistry`);
-      const registryData: { nodes: { nodeId: number; pubKey: string; }[] } = await registryResponse.json();
-      const nodes = registryData.nodes;
+      const registryResponse = await fetch(`http://localhost:8080/getNodeRegistry`);
+      const registryData = await registryResponse.json();
+      if (registryData instanceof GetNodeRegistryBody){
+        const nodes = registryData.nodes;
+
+        const destinationNode = nodes.find(node => node.nodeId === destinationUserId);
+        if (!destinationNode) {
+          return res.status(400).json({ error: "Destination user not found" });
+        }
+
+        const symmetricKey = await createRandomSymmetricKey();
+        const symmetricKeyString = await exportSymKey(symmetricKey);
+        const encryptedSymmetricKey = await rsaEncrypt(symmetricKeyString, destinationNode.pubKey);
+        const encryptedMessage = await symEncrypt(symmetricKey, message);
+
+        await fetch(`http://localhost:${BASE_USER_PORT + destinationUserId}/message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: encryptedMessage }),
+        });
+
+        lastSentMessage = message;
+        return res.json({ success: true/*, message: "Message sent successfully"*/ });
+      }
+      /*const nodes = registryData.nodes;
 
 
       const shuffledNodes = nodes.sort(() => Math.random() - 0.5).slice(0, 3);
@@ -74,7 +96,7 @@ export async function user(userId: number) {
         const encryptedData = await symEncrypt(await importSymKey(symmetricKeys[i]), encryptedMessage);
 
         encryptedMessage = encryptedData + encryptedKey + destination;
-      }
+      }*/
 
       await fetch(`http://localhost:${BASE_USER_PORT + shuffledNodes[0].nodeId}/message`, {
         method: 'POST',
