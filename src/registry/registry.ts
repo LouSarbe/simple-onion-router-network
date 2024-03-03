@@ -1,7 +1,7 @@
 import bodyParser from "body-parser";
 import express, { Request, Response } from "express";
 import { REGISTRY_PORT } from "../config";
-import { generateRsaKeyPair } from "../crypto";
+import { generateRsaKeyPair, exportPubKey, exportPrvKey } from "../crypto";
 import { webcrypto } from "crypto";
 
 export type Node = { nodeId: number; pubKey: string };
@@ -15,6 +15,10 @@ export type GetNodeRegistryBody = {
   nodes: Node[];
 };
 
+let registeredNodes: Node[] = [];
+let privateKey: webcrypto.CryptoKey | null = null;
+let publicKey: webcrypto.CryptoKey | null = null;
+
 export async function launchRegistry() {
   const _registry = express();
   _registry.use(express.json());
@@ -24,11 +28,8 @@ export async function launchRegistry() {
   _registry.get("/status", (req: Request, res: Response) => {
     res.send("live");
   });
-  
 
   // 3.1
-  let registeredNodes: Node[] = [];
-
   _registry.post("/registerNode", (req: Request<{}, {}, RegisterNodeBody>, res: Response) => {
     const { nodeId, pubKey } = req.body;
 
@@ -49,28 +50,41 @@ export async function launchRegistry() {
   });
 
   // 3.2
-  let privateKey: webcrypto.CryptoKey | null = null;
-
   _registry.get("/getPrivateKey", async (req: Request, res: Response) => {
     // 3.3
-    if (!privateKey) {
-      try {
-        const { privateKey: generatedPrivateKey } = await generateRsaKeyPair();
+    try {
+      if (!privateKey) {
+        const { publicKey: generatedPublicKey, privateKey: generatedPrivateKey } = await generateRsaKeyPair();
+        publicKey = generatedPublicKey;
         privateKey = generatedPrivateKey;
-      } catch (error) {
-        console.error("Error generating private key:", error);
-        return res.status(500).json({ error: "Internal server error" });
       }
+      return res.json({ result: exportPrvKey(privateKey) });
+    } catch (error) {
+      console.error("Error generating private key:", error);
+      return res.status(500).json({ error: "Internal server error" });
     }
-    return res.json({ result: privateKey });
+  });
+
+  // 3.3
+  _registry.get("/getPublicKey", async (req: Request, res: Response) => {
+    // 3.3
+    try {
+      if (!publicKey) {
+        const { publicKey: generatedPublicKey, privateKey: generatedPrivateKey } = await generateRsaKeyPair();
+        publicKey = generatedPublicKey;
+        privateKey = generatedPrivateKey;
+      }
+      return res.json({ result: exportPubKey(publicKey) });
+    } catch (error) {
+      console.error("Error generating private key:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   // 3.4
   _registry.get("/getNodeRegistry", (req: Request, res: Response) => {
-    const nodeRegistryPayload = { nodes: registeredNodes };
-    res.json(nodeRegistryPayload);
+    res.json({ nodes: registeredNodes });
   });
-
 
   const server = _registry.listen(REGISTRY_PORT, () => {
     console.log(`registry is listening on port ${REGISTRY_PORT}`);
